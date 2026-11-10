@@ -13,6 +13,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Set up Python for package smoke test
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install MinGW-w64 and Qt from MSYS2
         uses: msys2/setup-msys2@v2
         with:
@@ -34,19 +39,44 @@ jobs:
           -DBUILD_TESTING=OFF
           && cmake --build build --parallel
 
-      - name: Deploy Qt runtime and prepare portable folder
+      - name: Deploy Qt runtime and collect transitive DLL dependencies
         shell: msys2 {0}
         run: |
-          mkdir -p release/RcloneBrowserNG
-          cp build/build/RcloneBrowser.exe build/build/RcloneBrowserPassword.exe release/RcloneBrowserNG/
-          cp README.md CHANGELOG.md release/RcloneBrowserNG/
-          cp LICENSE release/RcloneBrowserNG/License.txt
+          stage=release/RcloneBrowserNG
+          mkdir -p "$stage"
+          cp build/build/RcloneBrowser.exe build/build/RcloneBrowserPassword.exe "$stage/"
+          cp README.md CHANGELOG.md "$stage/"
+          cp LICENSE "$stage/License.txt"
           if command -v windeployqt6 >/dev/null 2>&1; then
-            windeployqt6 --release --compiler-runtime --no-translations release/RcloneBrowserNG/RcloneBrowser.exe release/RcloneBrowserNG/RcloneBrowserPassword.exe
+            windeployqt6 --release --compiler-runtime --no-translations "$stage/RcloneBrowser.exe" "$stage/RcloneBrowserPassword.exe"
           else
-            windeployqt --release --compiler-runtime --no-translations release/RcloneBrowserNG/RcloneBrowser.exe release/RcloneBrowserNG/RcloneBrowserPassword.exe
+            windeployqt --release --compiler-runtime --no-translations "$stage/RcloneBrowser.exe" "$stage/RcloneBrowserPassword.exe"
           fi
-          cp /ucrt64/bin/libwinpthread-1.dll /ucrt64/bin/libgcc_s_seh-1.dll /ucrt64/bin/libstdc++-6.dll release/RcloneBrowserNG/
+          mkdir -p "$stage/platforms"
+          cp /ucrt64/share/qt6/plugins/platforms/qoffscreen.dll "$stage/platforms/"
+          for pass in {1..10}; do
+            added=0
+            while IFS= read -r -d '' binary; do
+              while IFS= read -r dll; do
+                [[ -n "$dll" ]] || continue
+                if find "$stage" -type f -iname "$dll" -print -quit | grep -q .; then
+                  continue
+                fi
+                dependency=$(find /ucrt64/bin -maxdepth 1 -type f -iname "$dll" -print -quit)
+                if [[ -n "$dependency" ]]; then
+                  cp "$dependency" "$stage/"
+                  added=1
+                fi
+              done < <(objdump -p "$binary" | sed -n 's/^[[:space:]]*DLL Name: //p')
+            done < <(find "$stage" -type f \( -iname '*.exe' -o -iname '*.dll' \) -print0)
+            [[ "$added" -eq 1 ]] || break
+          done
+
+      - name: Verify packaged app starts without MSYS2 on PATH
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          python scripts/smoke_package.py --artifact release/RcloneBrowserNG --version $version
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y

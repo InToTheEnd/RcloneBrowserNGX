@@ -82,6 +82,8 @@ def smoke(artifact: Path, version: str) -> None:
     with prepared_artifact(artifact) as binary:
         environment = os.environ.copy()
         environment["QT_QPA_PLATFORM"] = "offscreen"
+        if sys.platform == "win32":
+            environment["PATH"] = str(Path(os.environ["SystemRoot"]) / "System32")
         result = subprocess.run(
             [str(binary), "--version"],
             cwd=binary.parent,

@@ -30,7 +30,8 @@ bool writePasswordCommandOutput(const QString &password) {
 int main(int argc, char *argv[]) {
 
 #if defined(Q_OS_WIN32)
-  SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32);
+  SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
+                           LOAD_LIBRARY_SEARCH_SYSTEM32);
 #endif
 
   QApplication app(argc, argv);
