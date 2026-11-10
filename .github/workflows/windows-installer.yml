@@ -13,30 +13,54 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install MinGW-w64 and Qt from MSYS2
+        uses: msys2/setup-msys2@v2
         with:
-          python-version: "3.12"
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-qt6-base
+            mingw-w64-x86_64-qt6-tools
 
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: "6.11.1"
-          host: windows
-          target: desktop
-          arch: win64_msvc2022_64
-          modules: qtbase
+      - name: Configure and build
+        shell: msys2 {0}
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_PREFIX_PATH=/mingw64
+          -DBUILD_TESTING=OFF
+          && cmake --build build --parallel
 
-      - name: Set Qt path
-        shell: pwsh
-        run: echo "QT=$env:QT_ROOT_DIR" >> $env:GITHUB_ENV
+      - name: Deploy Qt runtime and prepare portable folder
+        shell: msys2 {0}
+        run: |
+          mkdir -p release/RcloneBrowserNG
+          cp build/build/RcloneBrowser.exe build/build/RcloneBrowserPassword.exe release/RcloneBrowserNG/
+          cp README.md CHANGELOG.md LICENSE release/RcloneBrowserNG/
+          if command -v windeployqt6 >/dev/null 2>&1; then
+            windeployqt6 --release --compiler-runtime --no-translations release/RcloneBrowserNG/RcloneBrowser.exe release/RcloneBrowserNG/RcloneBrowserPassword.exe
+          else
+            windeployqt --release --compiler-runtime --no-translations release/RcloneBrowserNG/RcloneBrowser.exe release/RcloneBrowserNG/RcloneBrowserPassword.exe
+          fi
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
 
-      - name: Build Windows packages
-        shell: cmd
-        run: scripts\release_windows.cmd
+      - name: Create installer and portable archive
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $appDir = "RcloneBrowserNG-$version-windows-x64"
+          Rename-Item release/RcloneBrowserNG $appDir
+          Compress-Archive -Path "release/$appDir/*" -DestinationPath "release/$appDir.zip" -CompressionLevel Optimal
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          Push-Location scripts
+          & $iscc "/dMyAppVersion=$version" '/dMyAppId={{0AF9BF43-8D44-4AFF-AE60-6CECF1BF0D31}' "/dMyAppDir=$appDir" '/dMyAppArch=x64' "/O$PWD\..\release" "/F$appDir-setup" rclone-browser-win-installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          Pop-Location
 
       - name: Upload installer and portable archive
         uses: actions/upload-artifact@v4
