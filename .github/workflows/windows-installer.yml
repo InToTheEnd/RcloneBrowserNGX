@@ -1,0 +1,49 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.8"
+          host: windows
+          target: desktop
+          arch: win64_msvc2019_64
+          modules: qtbase
+
+      - name: Set Qt path
+        shell: pwsh
+        run: echo "QT=$env:QT_ROOT_DIR" >> $env:GITHUB_ENV
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows packages
+        shell: cmd
+        run: scripts\release_windows.cmd
+
+      - name: Upload installer and portable archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: RcloneBrowserNG-Windows
+          path: |
+            release/*-setup.exe
+            release/*.zip
+          if-no-files-found: error
+          retention-days: 14
