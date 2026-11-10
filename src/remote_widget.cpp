@@ -339,7 +339,7 @@ private:
 RemoteWidget::RemoteWidget(IconCache *iconCache, const QString &remote,
                            bool isLocal, bool isGoogle, bool isGooglePhotos,
                            QWidget *parent)
-    : QWidget(parent) {
+    : QWidget(parent), mRemote(remote) {
   ui.setupUi(this);
   ui.horizontalLayout->setContentsMargins(10, 10, 10, 10);
   ui.verticalLayout->setSpacing(8);
@@ -584,8 +584,10 @@ RemoteWidget::RemoteWidget(IconCache *iconCache, const QString &remote,
       ui.buttonDownload, ui.buttonSize, ui.buttonTree, ui.buttonLink,
       ui.buttonExport};
   for (QToolButton *button : browserButtons) {
-    button->setMinimumHeight(34);
+    button->setMinimumHeight(52);
     button->setIconSize(QSize(18, 18));
+    button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+    button->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
   }
   UiPolish::SetPrimaryButton(ui.buttonUpload);
   UiPolish::SetPrimaryButton(ui.buttonDownload);
@@ -2310,6 +2312,16 @@ RemoteWidget::RemoteWidget(IconCache *iconCache, const QString &remote,
     ui.tree->expand(index);
   }
 
+}
+
+QString RemoteWidget::currentRclonePath() const {
+  const QModelIndex rootIndex = ui.tree->rootIndex();
+  const QString path = rootIndex.isValid() ? mModel->path(rootIndex).path()
+                                           : (mIsLocal ? QDir::rootPath() : QString());
+  if (mIsLocal) {
+    return QDir::toNativeSeparators(path);
+  }
+  return mRemote + ":" + path;
 }
 
 void RemoteWidget::refreshCurrentDir() { ui.refresh->trigger(); }

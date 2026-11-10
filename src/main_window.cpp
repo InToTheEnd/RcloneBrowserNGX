@@ -1,4 +1,5 @@
 #include "main_window.h"
+#include "dual_remote_copy_dialog.h"
 #include "job_options.h"
 #include "job_widget.h"
 #include "mount_backend.h"
@@ -1091,13 +1092,61 @@ MainWindow::MainWindow(bool initializeRuntime)
     }
 
     auto *splitter = new QSplitter(Qt::Horizontal, ui.tabs);
-    splitter->addWidget(makeRemoteWidget(leftName, leftType, splitter));
-    splitter->addWidget(makeRemoteWidget(rightName, rightType, splitter));
+    auto *leftRemote = makeRemoteWidget(leftName, leftType, splitter);
+    auto *rightRemote = makeRemoteWidget(rightName, rightType, splitter);
+    splitter->addWidget(leftRemote);
+    splitter->addWidget(rightRemote);
     splitter->setStretchFactor(0, 1);
     splitter->setStretchFactor(1, 1);
 
+    auto *pane = new QWidget(ui.tabs);
+    auto *paneLayout = new QVBoxLayout(pane);
+    paneLayout->setContentsMargins(0, 0, 0, 0);
+    paneLayout->setSpacing(6);
+    paneLayout->addWidget(splitter, 1);
+    auto *copyButton = new QPushButton("Copy Between Remotes…", pane);
+    UiPolish::SetPrimaryButton(copyButton);
+    copyButton->setToolTip(
+        "Copy from the left pane to the right pane, with optional sync and server-side copy.");
+    paneLayout->addWidget(copyButton, 0, Qt::AlignRight);
+    QObject::connect(copyButton, &QPushButton::clicked, this,
+                     [this, leftRemote, rightRemote]() {
+      DualRemoteCopyDialog dialog(leftRemote->currentRclonePath(),
+                                  rightRemote->currentRclonePath(), this);
+      if (dialog.exec() != QDialog::Accepted || dialog.sourcePath().isEmpty() ||
+          dialog.destinationPath().isEmpty()) {
+        return;
+      }
+      const bool mirror = dialog.mirrorDestination();
+      if (mirror) {
+        QMessageBox confirmation(this);
+        confirmation.setIcon(QMessageBox::Warning);
+        confirmation.setWindowTitle("Confirm Mirror");
+        confirmation.setText("Mirror can delete files in the destination.");
+        confirmation.setInformativeText(
+            "Files in the destination that are not present in the source may be deleted. Continue?");
+        confirmation.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
+        confirmation.setDefaultButton(QMessageBox::Cancel);
+        if (confirmation.exec() != QMessageBox::Yes) {
+          return;
+        }
+      }
+      QStringList args;
+      args << (mirror ? "sync" : "copy") << "--verbose" << "--use-json-log"
+           << "--stats" << "1s" << "--stats-file-name-length" << "0"
+           << GetDefaultRcloneOptionsList();
+      if (dialog.serverSideAcrossConfigs()) {
+        args << "--server-side-across-configs";
+      }
+      args << leftRemote->getDriveSharedArgs()
+           << rightRemote->getDriveSharedArgs()
+           << dialog.sourcePath() << dialog.destinationPath();
+      addTransfer(mirror ? "Mirror between remotes" : "Copy between remotes",
+                  dialog.sourcePath(), dialog.destinationPath(), args);
+    });
+
     int index = ui.tabs->addTab(
-        splitter, QString("%1 | %2").arg(leftName, rightName));
+        pane, QString("%1 | %2").arg(leftName, rightName));
     ui.tabs->setCurrentIndex(index);
   });
 

@@ -16,6 +16,7 @@ public:
   ~RemoteWidget();
 
   QStringList getDriveSharedArgs() const;
+  QString currentRclonePath() const;
   void refreshCurrentDir();
   void focusPathBar();
   void applyBackendFeatures(const BackendFeatures &features);
@@ -47,6 +48,7 @@ private:
   QLineEdit *mFileFilter = nullptr;
   QHBoxLayout *mBreadcrumbLayout = nullptr;
   bool mIsLocal = false;
+  QString mRemote;
   BackendFeatures mFeatures;
   QPushButton *mTrashButton = nullptr;
 
