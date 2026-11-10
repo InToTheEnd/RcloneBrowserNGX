@@ -28,3 +28,4 @@ CONTINUATION_PROMPT.md
 # Python bytecode
 __pycache__/
 *.pyc
+.dyad/
