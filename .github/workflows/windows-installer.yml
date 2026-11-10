@@ -39,7 +39,8 @@ jobs:
         run: |
           mkdir -p release/RcloneBrowserNG
           cp build/build/RcloneBrowser.exe build/build/RcloneBrowserPassword.exe release/RcloneBrowserNG/
-          cp README.md CHANGELOG.md LICENSE release/RcloneBrowserNG/
+          cp README.md CHANGELOG.md release/RcloneBrowserNG/
+          cp LICENSE release/RcloneBrowserNG/License.txt
           if command -v windeployqt6 >/dev/null 2>&1; then
             windeployqt6 --release --compiler-runtime --no-translations release/RcloneBrowserNG/RcloneBrowser.exe release/RcloneBrowserNG/RcloneBrowserPassword.exe
           else
